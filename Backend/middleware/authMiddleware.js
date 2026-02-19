@@ -2,38 +2,39 @@ import jwt from 'jsonwebtoken';
 import { generateAccessToken } from '../utils/jwtHelpers.js';
 
 export const authenticateToken = (req, res, next) => {
-    const cookieAccess = req.cookies?.accessToken;
-    const authHeader = req.headers['authorization'];
-    const headerAccess = authHeader && authHeader.split(' ')[1];
-    const access = cookieAccess || headerAccess;
+    const token = req.cookies?.accessToken || req.headers['authorization']?.split(' ')[1];
 
-    if (access) {
+    if (token) {
         try {
-            const user = jwt.verify(access, process.env.ACCESS_TOKEN_SECRET);
-            req.user = user;
-            return next();
-        } catch (err) {
+            const verified = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+            req.user = verified;
+            return next(); 
+        } catch (error) {
         }
     }
 
-    const refresh = req.cookies?.refreshToken;
-    if (!refresh) {
-        return res.status(401).json({ error: 'Access Denied: No Token Provided' });
+    const refreshToken = req.cookies?.refreshToken;
+    
+    if (!refreshToken) {
+        return res.status(401).json({ message: 'Access Denied: Please Login' });
     }
 
     try {
-        const user = jwt.verify(refresh, process.env.REFRESH_TOKEN_SECRET);
-        // Mint new access and set cookie
-        const newAccess = generateAccessToken(user);
-        res.cookie('accessToken', newAccess, {
+        const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+        
+        const newAccessToken = generateAccessToken({ id: decoded.id, role: decoded.role });
+
+        res.cookie('accessToken', newAccessToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'Lax',
-            maxAge: 2 * 60 * 1000, // keep in sync with '2m'
+            sameSite: 'lax',
+            maxAge: 15 * 60 * 1000 
         });
-        req.user = user;
-        return next();
-    } catch (err) {
-        return res.status(401).json({ error: 'Invalid Token' });
+
+        req.user = decoded;
+        next();
+
+    } catch (error) {
+        return res.status(403).json({ message: 'Session Expired' });
     }
 };

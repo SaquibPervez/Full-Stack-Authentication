@@ -12,7 +12,7 @@ export const register = async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        await createUser(username, email, hashedPassword);
+        await createUser(username, email, hashedPassword, 'employee', 'General Staff');
 
         return res.status(201).json({ message: "User created successfully" });
 
@@ -36,10 +36,9 @@ export const login = async (req, res) => {
             return res.status(401).json({ error: "Invalid credentials" });
         }
 
-        const accessToken = generateAccessToken(user);
-        const refreshToken = generateRefreshToken(user);
+        const accessToken = generateAccessToken({ role: user.role, id: user.id });
+        const refreshToken = generateRefreshToken({ role: user.role, id: user.id, email: user.email });
 
-        // Set both refresh and access cookies for cookie-based auth
         res.cookie('refreshToken', refreshToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
@@ -50,16 +49,17 @@ export const login = async (req, res) => {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'Lax',
-            maxAge: 2 * 60 * 1000, // 2 minutes
+            maxAge: 15 * 60 * 1000, 
         });
 
         const userPayload = {
             id: user.id,
             email: user.email,
             username: user.username,
+            role: user.role,
         };
 
-        res.status(200).json({ message: "Login successful", accessToken, user: userPayload });
+        res.json({ message: "Login successful", accessToken, refreshToken, user: userPayload });
 
     } catch (error) {
         console.error(error);

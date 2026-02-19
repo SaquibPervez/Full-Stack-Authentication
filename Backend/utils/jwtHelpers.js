@@ -3,21 +3,20 @@ import jwt from 'jsonwebtoken'
 export const generateAccessToken = (user) => {
   const secret = process.env.ACCESS_TOKEN_SECRET
   return jwt.sign(
-    { id: user.id, email: user.email },
+    { id: user.id, role: user.role },
     secret,
-    { expiresIn: '2m' }
+    { expiresIn: '15m' }
   );
 }
 
 export const generateRefreshToken = (user) => {
   const secret = process.env.REFRESH_TOKEN_SECRET
   return jwt.sign(
-    { id: user.id, email: user.email },
+    { id: user.id, email: user.email, role: user.role },
     secret,
     { expiresIn: '7d' }
   );
 }
-
 
 export const refreshToken = (req, res) => {
   const token = req.cookies.refreshToken;

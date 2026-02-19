@@ -1,5 +1,6 @@
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import Cookies from 'js-cookie';
 
 // 1. Access Token ko Memory mein rakhna (Securest way)
 let accessToken = null;
@@ -19,7 +20,6 @@ const api = axios.create({
     },
 });
 
-// Decode JWT expiry for logging (no token contents logged)
 const getJwtExpiryISO = (token) => {
     try {
         const parts = token?.split?.('.') || [];
@@ -44,43 +44,43 @@ api.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
-// 4. Response Interceptor (Silent Refresh Logic)
+// 4. Response Interceptor (Silent Refresh + Global Session Handling)
 api.interceptors.response.use(
     (response) => response,
     async (error) => {
         const originalRequest = error?.config || {};
 
+        const status = error?.response?.status;
         const isRefreshCall = typeof originalRequest.url === 'string' 
             && originalRequest.url.includes('/auth/refresh-token');
         const isAuthCall = typeof originalRequest.url === 'string'
             && originalRequest.url.startsWith('/auth/');
 
-        // Agar 401 (Unauthorized) aaya aur humne retry nahi kiya
-        // Stop calling refresh endpoint; rely on backend middleware to auto-refresh using cookie.
-        // Do NOT retry auth endpoints like /auth/login to avoid double-submission.
-        if (error.response?.status === 401 && !originalRequest._retry && !isRefreshCall && !isAuthCall) {
+        // 1) For non-auth routes: on first 401, retry once so backend can
+        //    auto-refresh the access token using the refresh cookie.
+        if (status === 401 && !originalRequest._retry && !isRefreshCall && !isAuthCall) {
             originalRequest._retry = true;
-
-            try {
-                const method = (originalRequest.method || '').toUpperCase();
-                console.log(`🔒 401 for ${method} ${originalRequest.url}. Backend will auto-refresh from cookie; retrying once.`);
-
-                // Simply retry the original request; backend middleware will mint a new access cookie if refresh cookie is valid
-                return api(originalRequest);
-
-            } catch (refreshError) {
-                console.error('Session expired. User needs to login.');
-                toast.error('Session expired. Please log in again.');
-                setAccessToken(null);
-                // Agar refresh bhi fail, to Login page par bhejo
-                window.location.href = '/';
-                return Promise.reject(refreshError);
-            }
+            const method = (originalRequest.method || '').toUpperCase();
+            console.log(`🔒 401 for ${method} ${originalRequest.url}. Backend will auto-refresh from cookie; retrying once.`);
+            return api(originalRequest);
         }
 
-                // No explicit refresh endpoint, so no special-case for refresh call
+        // 2) If we still get 401/403 on any non-auth call, treat it as a
+        //    hard session expiry: clear client auth state and send user home.
+        if (!isAuthCall && !isRefreshCall && (status === 401 || status === 403)) {
+            console.error('Session expired. Redirecting to home.');
+            toast.error('Session expired. Please log in again.');
+            // Clear in-memory token and any persisted user cookie so
+            // AuthContext no longer sees the user as logged in.
+            setAccessToken(null);
+            Cookies.remove('auth_user');
+            // Send user back to root; App route at "/" will decide what to show.
+            window.location.href = '/';
+            return Promise.reject(error);
+        }
 
-                // Non-401 errors or when not retried → show toast
+        // 3) For all other errors (including /auth/* calls), just surface
+        //    the backend message.
         const message = error?.response?.data?.error
           || error?.response?.data?.message
           || error?.message

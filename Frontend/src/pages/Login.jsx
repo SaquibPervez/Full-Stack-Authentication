@@ -1,30 +1,31 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { useMutation } from '@tanstack/react-query';
 import useAuth from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 
 const Login = () => {
-    const { login, user } = useAuth();
+    const { login } = useAuth();
     const navigate = useNavigate();
     
     const [formData, setFormData] = useState({ email: '', password: '' });
 
-    useEffect(() => {
-        if (user) {
-            navigate('/dashboard', { replace: true });
-        }
-    }, [user, navigate]);
-
     const mutation = useMutation({
-        mutationFn: (data) => login(data),
-        onSuccess: () => {
+        mutationFn: async (data) => {
+            return await login(data);
+        },
+        onSuccess: (userData) => { 
             toast.success('Logged in successfully');
-            // ✅ UX Tip: 'replace: true' use karo taake history stack clean rahe
-            navigate('/dashboard', { replace: true });
+
+            if (userData.role === 'admin') {
+                navigate('/admin-dashboard', { replace: true });
+            } else if (userData.role === 'manager') {
+                navigate('/manager-dashboard', { replace: true });
+            } else {
+                navigate('/employee-dashboard', { replace: true });
+            }
         },
         onError: (error) => {
-          
             const message = error?.response?.data?.error || 'Login failed';
             console.log('Login error:', error);
             toast.error(message);
@@ -60,10 +61,10 @@ const Login = () => {
 
                 <button 
                     type="submit" 
-                    disabled={mutation.isPending}
-                    className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 disabled:bg-blue-300 flex justify-center items-center"
+                    disabled={mutation.isPending} // Loading ke waqt button disable
+                    className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 disabled:bg-blue-300 flex justify-center items-center cursor-pointer"
                 >
-                    {mutation.isPending ? (<span>Signing in...</span>) : ("Login")}
+                    {mutation.isPending ? "Signing in..." : "Login"}
                 </button>
             </form>
         </div>

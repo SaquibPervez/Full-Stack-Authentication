@@ -11,17 +11,15 @@ export const AuthProvider = ({ children }) => {
     // 1. Restore session from cookies (no refresh call on reload)
     useEffect(() => {
         try {
-            const storedToken = Cookies.get('auth_access_token');
             const storedUser = Cookies.get('auth_user');
-            if (storedToken && storedUser) {
-                setAccessToken(storedToken);
+            setAccessToken(null);
+            if (storedUser) {
                 try {
                     setUser(JSON.parse(storedUser));
                 } catch {
                     setUser(null);
                 }
             } else {
-                setAccessToken(null);
                 setUser(null);
             }
         } finally {
@@ -42,7 +40,6 @@ export const AuthProvider = ({ children }) => {
         setUser(data.user);
         // Persist for reload via cookies
         const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
-        Cookies.set('auth_access_token', data.accessToken, { sameSite: 'lax', secure: isHttps, expires: 7 });
         Cookies.set('auth_user', JSON.stringify(data.user), { sameSite: 'lax', secure: isHttps, expires: 7 });
         return data;
     };
