@@ -31,8 +31,9 @@ function CreateTaskModel({ onClose, employees = [] }) {
     onSuccess: (data) => {
       toast.success(data.message || "Task created successfully");
 
-      // queryClient.invalidateQueries(["adminStats"]);
-      queryClient.invalidateQueries(["tasks"]);
+      // Refresh relevant details after creating a task
+      queryClient.invalidateQueries(["adminTaskDetails"]);
+      queryClient.invalidateQueries(["managerStats"]);
 
       onClose();  
     },

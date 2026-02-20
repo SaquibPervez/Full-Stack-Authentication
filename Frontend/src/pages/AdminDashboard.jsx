@@ -251,7 +251,7 @@ const AdminDashboard = () => {
               </div>
               {openModal && <CreateTaskModel onClose={() => setOpenModal(false)} employees={employees} />}
               {/* Task Table Component */}
-              <TaskTable />
+              <TaskTable employees={employees} />
             </div>
 
             {/* Task Distribution Summary */}
@@ -405,7 +405,7 @@ const AdminDashboard = () => {
                   View All
                 </button>
               </div>
-              <TaskTable />
+              <TaskTable employees={employees} />
             </div>
 
             {/* Team Members Section */}

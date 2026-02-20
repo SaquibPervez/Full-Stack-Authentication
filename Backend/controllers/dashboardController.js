@@ -32,27 +32,55 @@ export const getAdminStats = async (req, res) => {
     }
 };
 
-// 👔 2. MANAGER DASHBOARD STATS
-// Manager sirf WO data dekhega jo USNE create kiya hai or uski team ka hai.
-export const getManagerStats = async (req, res) => {
+
+export const getManagerStats = async (req, res, next) => {
     try {
         const managerId = req.user.id;
 
-        const [myTasks, taskStatus] = await Promise.all([
-            // Tasks created by THIS manager
-            pool.query("SELECT count(*) FROM tasks WHERE created_by = $1", [managerId]),
-            // Status breakdown of tasks created by THIS manager
-            pool.query("SELECT status, count(*) FROM tasks WHERE created_by = $1 GROUP BY status", [managerId])
+        const [tasksRes, distRes, teamRes, workloadRes, recentTasksRes] = await Promise.all([
+            pool.query("SELECT COUNT(*) FROM tasks WHERE created_by = $1", [managerId]),
+            pool.query("SELECT status, COUNT(*) FROM tasks WHERE created_by = $1 GROUP BY status", [managerId]),
+            pool.query(`
+                SELECT DISTINCT u.id, u.username, u.email, u.designation, u.is_active 
+                FROM users u
+                JOIN tasks t ON u.id = t.assigned_to
+                WHERE t.created_by = $1 AND u.role = 'employee'
+            `, [managerId]),
+            
+            // 🔥 NEW 1: Workload per employee
+            pool.query(`
+                SELECT u.username, COUNT(t.id) as task_count 
+                FROM users u 
+                LEFT JOIN tasks t ON u.id = t.assigned_to AND t.status != 'completed'
+                WHERE t.created_by = $1 
+                GROUP BY u.username
+                ORDER BY task_count DESC
+            `, [managerId]),
+
+            // 🔥 NEW 2: 3 Most Recent Tasks
+            pool.query(`
+                SELECT id, title, status, due_date 
+                FROM tasks 
+                WHERE created_by = $1 
+                ORDER BY created_at DESC 
+                LIMIT 3
+            `, [managerId])
         ]);
 
-        res.json({
-            totalCreatedTasks: myTasks.rows[0].count,
-            taskDistribution: taskStatus.rows
+        res.status(200).json({
+            totalTasks: parseInt(tasksRes.rows[0].count, 10),
+            taskDistribution: distRes.rows.map(row => ({
+                status: row.status,
+                count: parseInt(row.count, 10)
+            })),
+            teamMembers: teamRes.rows,
+            teamSize: teamRes.rows.length,
+            teamWorkload: workloadRes.rows, // Array [{username: 'Saquib', task_count: 2}, ...]
+            recentTasks: recentTasksRes.rows  // Array of latest 3 tasks
         });
 
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: "Server Error" });
+        next(error);
     }
 };
 
