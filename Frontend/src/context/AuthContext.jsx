@@ -1,65 +1,54 @@
-import { createContext, useState, useEffect } from 'react';
+import { createContext, useState, useEffect, useContext } from 'react';
+import api from '../api/axios'; // New Axios instance
 import Cookies from 'js-cookie';
-import api, { setAccessToken } from '../apis/axios';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true); // Initial Load ke liye
+    const [loading, setLoading] = useState(true);
 
-    // 1. Restore session from cookies (no refresh call on reload)
+    // Initial session restore from a safe "auth_user" cookie
+    // Access and Refresh tokens are handled by HTTP-only cookies on the backend
     useEffect(() => {
-        try {
-            const storedUser = Cookies.get('auth_user');
-            setAccessToken(null);
-            if (storedUser) {
-                try {
-                    setUser(JSON.parse(storedUser));
-                } catch {
-                    setUser(null);
-                }
-            } else {
+        const storedUser = Cookies.get('auth_user');
+        if (storedUser) {
+            try {
+                setUser(JSON.parse(storedUser));
+            } catch {
                 setUser(null);
             }
-        } finally {
-            setLoading(false);
         }
+        setLoading(false);
     }, []);
 
-    // 2. Login Action (Sirf call karega, state update component karega)
-    const login = async (credentials) => {
-        const { data } = await api.post('/auth/login', credentials);
-        // Treat 200 with { error } as failure so UI shows correct toast
-        if (data?.error) {
-            const err = new Error(data.error);
-            err.response = { data };
-            throw err;
-        }
-        setAccessToken(data.accessToken);
-        setUser(data.user);
-        // Persist for reload via cookies
-        const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
-        Cookies.set('auth_user', JSON.stringify(data.user), { sameSite: 'lax', secure: isHttps, expires: 7 });
-        return data;
-    };
-
-    // 3. Logout Action
-    const logout = async () => {
-        try {
-            await api.post('/auth/logout');
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setAccessToken(null);
-            setUser(null);
-            Cookies.remove('auth_access_token');
+    // Set user and sync with a non-HttpOnly cookie for the UI (never the sensitive token!)
+    const setAuth = (userData) => {
+        setUser(userData);
+        if (userData) {
+            const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+            Cookies.set('auth_user', JSON.stringify(userData), { 
+                sameSite: 'lax', 
+                secure: isHttps, 
+                expires: 7 
+            });
+        } else {
             Cookies.remove('auth_user');
         }
     };
 
+    const logout = async () => {
+        try {
+            await api.post('/auth/logout');
+        } finally {
+            setAuth(null);
+            // Full refresh to clear memory-based states if needed
+            window.location.href = '/';
+        }
+    };
+
     return (
-        <AuthContext.Provider value={{ user, login, logout, loading }}>
+        <AuthContext.Provider value={{ user, setAuth, logout, loading }}>
             {!loading && children}
         </AuthContext.Provider>
     );

@@ -1,579 +1,283 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import useAuth from '../hooks/useAuth';
-import api from '../apis/axios';
-import { useNavigate } from 'react-router-dom';
+import api from '../api/axios';
 
-// Icons & Components
+// Components
 import StatCard from '../components/Dashboard/StatCard';
-import EmployeeTable from '../components/Dashboard/EmployeeTable';
 import TaskTable from '../components/Dashboard/TaskTable';
 import {
-  Users,
-  UserCheck,
-  ClipboardList,
-  LogOut,
-  LayoutDashboard,
-  TrendingUp,
-  Bell,
-  Search,
-  Menu,
-  X,
-  ChevronRight,
-  PieChart,
-  PlusCircle,
-  Download,
-  UserCog,
-  Clock,
-  CheckSquare,
-  Activity,
-  Filter,
-  MoreVertical,
-  Eye,
-  Edit,
-  Trash2,
-  SquareChartGantt
+  ClipboardList, CheckCircle2, ShieldAlert, Activity, Users, PlusCircle, Zap, ArrowRight, 
+  Target, TrendingUp, Globe, Clock, UserCheck, AlertTriangle
 } from 'lucide-react';
-import AddEmployeeModal from '../components/Dashboard/AddEmployeeModal';
 import CreateTaskModel from '../components/Dashboard/CreateTaskModel';
 
 const AdminDashboard = () => {
-  const { user, logout } = useAuth();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [openModal, setOpenModal] = useState(false);
-  // Fetch Data
-  const { 
-    data: dashboardData, 
-    isLoading, 
-    error, 
-    refetch 
-  } = useQuery({
-    queryKey: ['adminStats'], // Refetch if user changes
-    queryFn: async () => {
-      const res = await api.get('/dashboard/admin');
-      return res.data;
+  const { user } = useAuth();
+  const [openTaskModal, setOpenTaskModal] = useState(false);
 
+  // 1. Fetch System-wide Stats (Tasks, Users, Payouts)
+  const { data: systemData, isLoading: isSystemLoading, refetch: refetchSystem } = useQuery({
+    queryKey: ['dashboard', 'admin'], 
+    queryFn: async () => {
+      const res = await api.get('/dashboard/admin'); 
+      return res.data.data;
     },
-    retry: 2,
-    staleTime: 30000,
+    refetchInterval: 30000,
   });
 
-  const handleLogout = () => {
-    logout();
-    // navigate('/login');
-  };
+  // 2. Fetch Live Fleet Status (Attendance)
+  const { data: fleetData, isLoading: isFleetLoading, refetch: refetchFleet } = useQuery({
+    queryKey: ['attendance', 'status'],
+    queryFn: async () => {
+        const res = await api.get('/attendance/status');
+        return res.data.data;
+    },
+    refetchInterval: 15000,
+  });
 
-  const handleRefresh = () => {
-    refetch();
-  };
+  const isLoading = isSystemLoading || isFleetLoading;
 
-  const handleTabChange = (tab) => {
-    setActiveTab(tab);
-    setSidebarOpen(false);
-  };
+  const stats = useMemo(() => {
+    if (!systemData) return { totalUsers: 0, totalTasks: 0, completionRate: 0, totalPayout: 0 };
+    
+    const taskGroups = systemData.tasks || [];
+    const totalTasks = taskGroups.reduce((acc, curr) => acc + curr._count.id, 0);
+    const completedTasks = taskGroups.find(t => t.status === 'completed')?._count.id || 0;
+    const rate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
 
-  // Loading State
-  if (isLoading) {
+    return {
+        totalUsers: systemData.totalUsers || 0,
+        totalTasks,
+        completionRate: Math.round(rate),
+        totalPayout: systemData.totalPayout || 0
+    };
+  }, [systemData]);
+
+  if (isLoading && !systemData) {
     return (
-      <div className="h-screen flex flex-col justify-center items-center bg-gray-50">
-        <div className="relative">
-          <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-          <div className="mt-6 text-lg font-medium text-gray-700">
-            Loading dashboard...
-          </div>
-        </div>
+      <div className="h-[90vh] flex flex-col justify-center items-center bg-white">
+        <div className="w-12 h-12 border-4 border-slate-100 border-t-blue-600 rounded-full animate-spin shadow-lg"></div>
+        <p className="mt-6 text-[10px] tracking-[0.3em] uppercase font-black text-slate-400 animate-pulse">Establishing Secure Uplink</p>
       </div>
     );
   }
-
-  // Error State
-  if (error) {
-    return (
-      <div className="min-h-screen flex flex-col justify-center items-center bg-gray-50 p-6">
-        <div className="bg-white p-8 rounded-2xl shadow-lg max-w-md text-center">
-          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-10 h-10 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <h3 className="text-xl font-bold text-gray-900 mb-2">Unable to load data</h3>
-          <p className="text-gray-600 mb-6">Please try refreshing the page or contact support.</p>
-          <button 
-            onClick={handleRefresh}
-            className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
-          >
-            Refresh Dashboard
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Destructure Data
-  const { 
-    users = 0, 
-    managers = 0, 
-    tasks = 0, 
-    taskDistribution = [], 
-    employees = []
-  } = dashboardData || {};
-
-  // Calculate completion rate
-  const completedTasks = taskDistribution?.find(t => t.status === 'completed')?.count || 0;
-  const completionRate = tasks > 0 ? ((completedTasks / tasks) * 100).toFixed(1) : 0;
-
-  // Employees data comes directly from API
-
-  // Render content based on active tab
-  const renderContent = () => {
-    switch(activeTab) {
-      case 'users':
-        return (
-          <div className="space-y-6">
-            {/* Users Header Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <StatCard 
-                title="Total Employees" 
-                value={users} 
-                icon={Users} 
-                color="from-blue-600 to-blue-700"
-                bgColor="bg-blue-100"
-                iconColor="text-blue-600"
-                trend="+12%"
-              />
-              <StatCard 
-                title="Active Managers" 
-                value={managers} 
-                icon={UserCheck} 
-                color="from-purple-600 to-purple-700"
-                bgColor="bg-purple-100"
-                iconColor="text-purple-600"
-                trend="+5%"
-              />
-              <StatCard 
-                title="Active Users" 
-                value={users} 
-                icon={CheckSquare} 
-                color="from-green-600 to-green-700"
-                bgColor="bg-green-100"
-                iconColor="text-green-600"
-                trend="91%"
-              />
-              <StatCard 
-                title="Pending" 
-                value={taskDistribution?.find(t => t.status === 'pending')?.count || 0} 
-                icon={Clock} 
-                color="from-orange-600 to-orange-700"
-                bgColor="bg-orange-100"
-                iconColor="text-orange-600"
-              />
-            </div>
-
-            {/* Employee Table - Full Page */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">All Employees</h2>
-                  <p className="text-sm text-gray-600 mt-1">Manage employees, roles and permissions</p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                  onClick={() => setOpenModal(true)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium flex items-center gap-2">
-                    <PlusCircle size={18} />
-                    Add Employee
-                  </button>
-                </div>
-              </div>
-              {openModal && <AddEmployeeModal onClose={() => setOpenModal(false)} />}
-              {/* Employee  Table Component */}
-              <EmployeeTable employees={employees}  />
-            </div>
-          </div>
-        );
-
-      case 'tasks':
-        return (
-          <div className="space-y-6">
-            {/* Tasks Header Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <StatCard 
-                title="Total Tasks" 
-                value={tasks} 
-                icon={ClipboardList} 
-                color="from-blue-600 to-blue-700"
-                bgColor="bg-blue-100"
-                iconColor="text-blue-600"
-                trend="+23%"
-              />
-              <StatCard 
-                title="In Progress" 
-                value={taskDistribution?.find(t => t.status === 'in_progress')?.count || 0} 
-                icon={Activity} 
-                color="from-purple-600 to-purple-700"
-                bgColor="bg-purple-100"
-                iconColor="text-purple-600"
-              />
-              <StatCard 
-                title="Completed" 
-                value={completedTasks} 
-                icon={CheckSquare} 
-                color="from-green-600 to-green-700"
-                bgColor="bg-green-100"
-                iconColor="text-green-600"
-              />
-              <StatCard 
-                title="Overdue" 
-                value={taskDistribution?.find(t => t.status === 'overdue')?.count || 0} 
-                icon={Clock} 
-                color="from-red-600 to-red-700"
-                bgColor="bg-red-100"
-                iconColor="text-red-600"
-              />
-            </div>
-
-            {/* Task Table - Full Page */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">All Tasks</h2>
-                  <p className="text-sm text-gray-600 mt-1">Create, assign and track all tasks</p>
-                </div>
-                <div className="flex gap-2">  
-                <button
-                  onClick={() => setOpenModal(true)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium flex items-center gap-2">
-                    <PlusCircle size={18} />
-                    Create Task
-                  </button>
-                </div>
-              </div>
-              {openModal && <CreateTaskModel onClose={() => setOpenModal(false)} employees={employees} />}
-              {/* Task Table Component */}
-              <TaskTable employees={employees} />
-            </div>
-
-            {/* Task Distribution Summary */}
-            {taskDistribution?.length > 0 && (
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Task Distribution</h3>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  {taskDistribution.map((item) => (
-                    <div key={item.status} className="p-4 bg-gray-50 rounded-xl">
-                      <p className="text-sm text-gray-600 capitalize mb-1">{item.status.replace('_', ' ')}</p>
-                      <p className="text-2xl font-bold text-gray-900">{item.count}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {tasks > 0 ? ((item.count / tasks) * 100).toFixed(1) : 0}% of total
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        );
-
-      default: // dashboard
-        return (
-          <div className="space-y-8">
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <StatCard 
-                title="Total Employees" 
-                value={users} 
-                icon={Users} 
-                color="from-blue-600 to-blue-700"
-                bgColor="bg-blue-100"
-                iconColor="text-blue-600"
-                trend="+12%"
-              />
-              <StatCard 
-                title="Active Managers" 
-                value={managers} 
-                icon={UserCheck} 
-                color="from-purple-600 to-purple-700"
-                bgColor="bg-purple-100"
-                iconColor="text-purple-600"
-                trend="+5%"
-              />
-              <StatCard 
-                title="Total Tasks" 
-                value={tasks} 
-                icon={ClipboardList} 
-                color="from-orange-600 to-orange-700"
-                bgColor="bg-orange-100"
-                iconColor="text-orange-600"
-                trend="+23%"
-              />
-              <StatCard 
-                title="Completion Rate" 
-                value={`${completionRate}%`} 
-                icon={TrendingUp} 
-                color="from-green-600 to-green-700"
-                bgColor="bg-green-100"
-                iconColor="text-green-600"
-                trend={`${completedTasks}/${tasks} tasks`}
-              />
-            </div>
-
-            {/* Task Distribution & Quick Actions */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Task Distribution Card */}
-              <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-900">Task Status Overview</h2>
-                    <p className="text-sm text-gray-600 mt-1">Distribution across all tasks</p>
-                  </div>
-                  <button 
-                    onClick={() => handleTabChange('tasks')}
-                    className="px-4 py-2 text-sm bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
-                  >
-                    View All Tasks
-                  </button>
-                </div>
-                
-                <div className="space-y-5">
-                  {taskDistribution?.length > 0 ? taskDistribution.map((item) => {
-                    const percentage = tasks > 0 ? ((parseInt(item.count) / parseInt(tasks)) * 100).toFixed(1) : 0;
-                    return (
-                      <div key={item.status}>
-                        <div className="flex justify-between mb-1">
-                          <span className="capitalize text-gray-700 font-medium">
-                            {item.status.replace('_', ' ')}
-                          </span>
-                          <span className="text-gray-900 font-bold">{percentage}%</span>
-                        </div>
-                        <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-2.5 rounded-full transition-all duration-500 ${
-                              item.status === 'completed' ? 'bg-green-500' :
-                              item.status === 'in_progress' ? 'bg-blue-500' :
-                              'bg-yellow-500'
-                            }`}
-                            style={{ width: `${percentage}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    );
-                  }) : (
-                    <div className="text-center py-8 text-gray-500">
-                      No task data available
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Quick Actions */}
-              <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-6 text-white">
-                <div className="flex items-center justify-between mb-4">
-                  <PieChart size={24} />
-                  <span className="px-3 py-1 bg-white/20 rounded-full text-xs font-medium">Quick Actions</span>
-                </div>
-                <h3 className="text-xl font-bold mb-4">Dashboard Tools</h3>
-                <div className="space-y-3">
-                  <button 
-                    onClick={() => handleTabChange('users')}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 bg-white/10 rounded-xl hover:bg-white/20 transition-colors"
-                  >
-                    <Users size={18} />
-                    <span>Manage Users</span>
-                  </button>
-                  <button 
-                    onClick={() => handleTabChange('tasks')}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 bg-white/10 rounded-xl hover:bg-white/20 transition-colors"
-                  >
-                    <ClipboardList size={18} />
-                    <span>Manage Tasks</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Recent Tasks Section */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">Recent Tasks</h2>
-                  <p className="text-sm text-gray-600 mt-1">Latest tasks and their status</p>
-                </div>
-                <button 
-                  onClick={() => handleTabChange('tasks')}
-                  className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors font-medium"
-                >
-                  View All
-                </button>
-              </div>
-              <TaskTable employees={employees} />
-            </div>
-
-            {/* Team Members Section */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">Team Members</h2>
-                  <p className="text-sm text-gray-600 mt-1">Active employees and their roles</p>
-                </div>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => handleTabChange('users')}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
-                  >
-                    <UserCog size={18} />
-                    Manage Users
-                  </button>
-                </div>
-              </div>
-              <EmployeeTable employees={employees} />
-            </div>
-          </div>
-        );
-    }
-  };
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Mobile Sidebar Toggle */}
-      <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2.5 bg-white rounded-xl shadow-lg text-gray-700 hover:bg-gray-50"
-      >
-        {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
-      </button>
+    <div className="max-w-7xl mx-auto px-6 py-10 space-y-12 bg-white min-h-screen">
+      
+      {/* ─── Strategic Header ─── */}
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-slate-100 pb-10">
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+             <div className="w-10 h-10 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-2xl shadow-slate-900/20">
+                <ShieldAlert size={20} strokeWidth={2.5} />
+             </div>
+             <div>
+                <p className="text-[10px] tracking-[0.2em] uppercase font-black text-blue-600 mb-0.5">Tactical Command</p>
+                <h1 className="text-4xl font-black text-slate-900 tracking-tighter leading-none">
+                    Operations Center
+                </h1>
+             </div>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-4">
+            <button 
+                onClick={() => { refetchSystem(); refetchFleet(); }} 
+                className="group w-12 h-12 bg-white border border-slate-200 rounded-2xl flex items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-500/30 transition-all shadow-xl shadow-slate-200/20 active:scale-95"
+                title="Synchronize Data"
+            >
+                <Activity size={20} className={isLoading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'} />
+            </button>
+            <button
+                onClick={() => setOpenTaskModal(true)}
+                className="flex items-center gap-3 px-8 py-3.5 bg-slate-900 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-2xl shadow-slate-900/30 hover:bg-slate-800 active:scale-95 transition-all"
+            >
+                <PlusCircle size={16} strokeWidth={3} /> Initiate Mission
+            </button>
+        </div>
+      </header>
 
-      {/* Sidebar Overlay */}
-      {sidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
+      {/* ─── Global System Stats ─── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <StatCard 
+            title="Total Assets" 
+            value={stats.totalUsers} 
+            icon={Users} 
+            bgColor="bg-white" 
+            iconColor="text-slate-900" 
+            className="border-slate-100 shadow-xl shadow-slate-200/20"
+        />
+        <StatCard 
+            title="Active Missions" 
+            value={stats.totalTasks} 
+            icon={Target} 
+            bgColor="bg-white" 
+            iconColor="text-blue-600"
+            className="border-slate-100 shadow-xl shadow-slate-200/20"
+        />
+        <StatCard 
+            title="Strategic Payout" 
+            value={`$${(stats.totalPayout / 1000).toFixed(1)}k`} 
+            icon={Globe} 
+            bgColor="bg-white" 
+            iconColor="text-emerald-600"
+            className="border-slate-100 shadow-xl shadow-slate-200/20"
+        />
+        <StatCard 
+            title="Efficiency" 
+            value={`${stats.completionRate}%`} 
+            icon={TrendingUp} 
+            bgColor="bg-slate-900 text-white" 
+            iconColor="text-white"
+            className="border-slate-900 shadow-2xl shadow-slate-900/30"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+          
+          {/* ─── Mission Analytics (Left Column) ─── */}
+          <div className="lg:col-span-2 space-y-12">
+              <section className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-1.5 h-6 bg-blue-600 rounded-full" />
+                        <div>
+                            <h2 className="text-xl font-black text-slate-900 tracking-tight">Mission Metrics</h2>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Aggregate Completion Data</p>
+                        </div>
+                    </div>
+                  </div>
+                  
+                  <div className="p-10 bg-white border border-slate-100 rounded-[2.5rem] shadow-xl shadow-slate-200/20 space-y-10">
+                      <div className="space-y-4">
+                          <div className="flex justify-between items-end">
+                              <span className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em]">Overall Completion Rate</span>
+                              <span className="text-2xl font-black text-blue-600 tracking-tighter">{stats.completionRate}%</span>
+                          </div>
+                          <div className="h-4 bg-slate-100 rounded-full overflow-hidden p-1 shadow-inner">
+                              <motion.div 
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${stats.completionRate}%` }}
+                                  transition={{ duration: 1.5, ease: "easeOut" }}
+                                  className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full shadow-lg shadow-blue-500/20"
+                              />
+                          </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-4">
+                          {systemData?.tasks?.map((group) => (
+                              <div key={group.status} className="p-6 bg-slate-50/50 rounded-3xl border border-slate-100/50">
+                                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{group.status.replace('_', ' ')}</p>
+                                  <p className="text-2xl font-black text-slate-900">{group._count.id}</p>
+                                  <div className="mt-3 h-1 bg-slate-200 rounded-full overflow-hidden">
+                                      <div 
+                                        className={`h-full ${group.status === 'completed' ? 'bg-emerald-500' : group.status === 'in_progress' ? 'bg-blue-500' : 'bg-amber-500'}`} 
+                                        style={{ width: `${(group._count.id / stats.totalTasks) * 100}%` }}
+                                      />
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+              </section>
+
+              <section className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-1.5 h-6 bg-slate-900 rounded-full" />
+                        <div>
+                            <h2 className="text-xl font-black text-slate-900 tracking-tight">Active Operations</h2>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Real-time Deployment Tracking</p>
+                        </div>
+                    </div>
+                    <Link to="/admin-dashboard/operations" className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:underline flex items-center gap-2">
+                        System Logs <ArrowRight size={12} />
+                    </Link>
+                  </div>
+                  <TaskTable limit={5} isDashboard={true} />
+              </section>
+          </div>
+
+          {/* ─── Team Intelligence (Right Column) ─── */}
+          <div className="space-y-12">
+              <section className="space-y-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-1.5 h-6 bg-emerald-500 rounded-full" />
+                    <div>
+                        <h2 className="text-xl font-black text-slate-900 tracking-tight">Fleet Status</h2>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Live Presence Data</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900 rounded-[2.5rem] p-8 shadow-2xl shadow-slate-900/30 text-white space-y-8">
+                     <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-white/5 border border-white/10 rounded-3xl p-5">
+                            <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-2">Online</p>
+                            <p className="text-3xl font-black text-emerald-400">{fleetData?.summary?.online || 0}</p>
+                        </div>
+                        <div className="bg-white/5 border border-white/10 rounded-3xl p-5">
+                            <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-2">Offline</p>
+                            <p className="text-3xl font-black text-slate-500">{fleetData?.summary?.offline || 0}</p>
+                        </div>
+                     </div>
+
+                     <div className="space-y-4">
+                        <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Active Agents</p>
+                        <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                           {fleetData?.team?.filter(u => u.live_status === 'online').map(member => (
+                               <div key={member.id} className="flex items-center justify-between group">
+                                  <div className="flex items-center gap-3">
+                                     <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-[10px] font-black uppercase border border-emerald-500/30 transition-all group-hover:scale-110">
+                                        {member.username.charAt(0)}
+                                     </div>
+                                     <div>
+                                        <p className="text-[11px] font-black tracking-tight">{member.username}</p>
+                                        <p className="text-[9px] text-white/40 font-bold uppercase tracking-widest">{member.designation}</p>
+                                     </div>
+                                  </div>
+                                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgb(16,185,129)]" />
+                               </div>
+                           ))}
+                           {fleetData?.summary?.online === 0 && (
+                               <div className="py-10 text-center opacity-20">
+                                  <Clock size={32} className="mx-auto mb-4" />
+                                  <p className="text-[10px] font-black uppercase tracking-widest">No Active Sessions</p>
+                               </div>
+                           )}
+                        </div>
+                     </div>
+                  </div>
+              </section>
+
+              <section className="space-y-6">
+                <div className="p-8 bg-blue-50 border border-blue-100 rounded-3xl space-y-4">
+                    <div className="flex items-center gap-3 text-blue-600">
+                        <Zap size={18} strokeWidth={3} />
+                        <h4 className="text-[11px] font-black uppercase tracking-widest">System Advisory</h4>
+                    </div>
+                    <p className="text-xs text-blue-900/60 leading-relaxed font-medium">
+                        Unified communications and mission telemetry are currently stable. Next automated sync in 30 seconds.
+                    </p>
+                    <Link to="/admin-dashboard/directory" className="flex items-center justify-between p-4 bg-white rounded-2xl border border-blue-200 text-blue-600 group transition-all hover:bg-blue-600 hover:text-white">
+                        <span className="text-[10px] font-black uppercase tracking-widest">Personnel DB</span>
+                        <UserCheck size={16} className="group-hover:rotate-12 transition-transform" />
+                    </Link>
+                </div>
+              </section>
+          </div>
+      </div>
+
+      {/* ─── Modals ─── */}
+      {openTaskModal && (
+        <CreateTaskModel 
+          onClose={() => setOpenTaskModal(false)} 
         />
       )}
 
-      {/* Sidebar */}
-      <aside className={`
-        fixed lg:static w-72 bg-gradient-to-b from-slate-900 to-slate-800 text-white 
-        flex flex-col h-full transition-transform duration-300 ease-in-out z-50
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
-        {/* Logo & Brand */}
-        <div className="p-6 border-b border-slate-700/50">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
-              <SquareChartGantt className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Project<span className="text-blue-400"> Manager </span></h1>
-              <p className="text-xs text-slate-400 mt-0.5">Administrator Panel</p>
-            </div>
-          </div>
-        </div>
-
-        {/* User Profile */}
-        <div className="p-6 border-b border-slate-700/50">
-          <div className="flex items-center space-x-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-xl flex items-center justify-center">
-              <span className="text-xl font-bold text-white">
-                {user?.username?.charAt(0).toUpperCase() || 'A'}
-              </span>
-            </div>
-            <div>
-              <p className="font-semibold text-white">{user?.username || 'Admin'}</p>
-              <p className="text-xs text-slate-400 mt-0.5">Administrator</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Navigation - Only Dashboard, Users, Tasks */}
-        <nav className="flex-1 p-4 overflow-y-auto">
-          <div className="space-y-1">
-            {/* Dashboard */}
-            <button
-              onClick={() => handleTabChange('dashboard')}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${
-                activeTab === 'dashboard' 
-                  ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' 
-                  : 'text-slate-300 hover:bg-slate-800/60'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <LayoutDashboard size={20} />
-                <span className="font-medium">Dashboard</span>
-              </div>
-              {activeTab === 'dashboard' && <ChevronRight size={16} />}
-            </button>
-
-            {/* Users - Shows EmployeeTable */}
-            <button
-              onClick={() => handleTabChange('users')}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all mt-1 ${
-                activeTab === 'users' 
-                  ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' 
-                  : 'text-slate-300 hover:bg-slate-800/60'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <Users size={20} />
-                <span className="font-medium">Users</span>
-              </div>
-              {activeTab === 'users' && <ChevronRight size={16} />}
-            </button>
-
-            {/* Tasks - Shows TaskTable */}
-            <button
-              onClick={() => handleTabChange('tasks')}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all mt-1 ${
-                activeTab === 'tasks' 
-                  ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' 
-                  : 'text-slate-300 hover:bg-slate-800/60'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <ClipboardList size={20} />
-                <span className="font-medium">Tasks</span>
-              </div>
-              {activeTab === 'tasks' && <ChevronRight size={16} />}
-            </button>
-          </div>
-        </nav>
-
-        {/* Logout Button */}
-        <div className="p-4 border-t border-slate-700/50">
-          <button 
-            onClick={handleLogout}
-            className="flex items-center space-x-3 px-4 py-3 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl w-full transition-colors"
-          >
-            <LogOut size={20} />
-            <span className="font-medium">Logout</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto bg-gray-50">
-        {/* Header */}
-        <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
-          <div className="px-8 py-4">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-gray-900 capitalize">
-                  {activeTab === 'dashboard' ? 'Dashboard Overview' : `${activeTab} Management`}
-                </h1>
-                <p className="text-gray-600 mt-1">
-                  Welcome back, <span className="font-semibold text-gray-900">{user?.username}</span>! 
-                  {activeTab === 'dashboard' && " Here's what's happening today."}
-                  {activeTab === 'users' && " Manage all employees and their roles."}
-                  {activeTab === 'tasks' && " Create, assign, and track all tasks."}
-                </p>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <div className="px-8 py-6">
-          {renderContent()}
-        </div>
-      </main>
     </div>
   );
 };

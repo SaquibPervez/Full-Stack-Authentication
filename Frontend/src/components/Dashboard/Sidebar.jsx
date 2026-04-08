@@ -1,130 +1,191 @@
-import { LayoutDashboard, Users, ClipboardList, ChevronRight, LogOut, Menu, X } from 'lucide-react';
+import React, { memo } from 'react';
+import { NavLink } from 'react-router-dom';
 
-const Sidebar = ({
-  sidebarOpen,
-  onToggle,
-  onClose,
-  activeTab,
-  onTabChange,
-  user,
-  onLogout,
-}) => (
-  <>
-    {/* Mobile Sidebar Toggle */}
-    <button
-      onClick={onToggle}
-      className="lg:hidden fixed top-4 left-4 z-50 p-2.5 bg-white rounded-xl shadow-lg text-gray-700 hover:bg-gray-50 cursor-pointer"
-    >
-      {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
-    </button>
+import LayoutDashboard from 'lucide-react/dist/esm/icons/layout-dashboard';
+import Users from 'lucide-react/dist/esm/icons/users';
+import ClipboardList from 'lucide-react/dist/esm/icons/clipboard-list';
+import LogOut from 'lucide-react/dist/esm/icons/log-out';
+import X from 'lucide-react/dist/esm/icons/x';
+import Timer from 'lucide-react/dist/esm/icons/timer';
+import ShieldCheck from 'lucide-react/dist/esm/icons/shield-check';
+import UserCircle from 'lucide-react/dist/esm/icons/user-circle';
+import Briefcase from 'lucide-react/dist/esm/icons/briefcase';
+import Settings from 'lucide-react/dist/esm/icons/settings';
+import BarChart3 from 'lucide-react/dist/esm/icons/bar-chart-3';
+import MessageSquare from 'lucide-react/dist/esm/icons/message-square';
+import BadgeDollarSign from 'lucide-react/dist/esm/icons/badge-dollar-sign';
 
-    {/* Sidebar Overlay */}
-    {sidebarOpen && (
-      <div
-        className="fixed inset-0 bg-black/50 z-40 lg:hidden transition-opacity duration-300 opacity-100 cursor-pointer"
-        onClick={onClose}
-      />
-    )}
+const NAVIGATION_CONFIG = {
+  admin: [
+    {
+      category: 'OVERVIEW',
+      links: [
+        { path: '/admin-dashboard', label: 'System Overview', icon: LayoutDashboard },
+      ],
+    },
+    {
+      category: 'WORKSPACE',
+      links: [
+        { path: '/admin-dashboard/directory', label: 'Personnel Directory', icon: Users },
+        { path: '/admin-dashboard/operations', label: 'Operations Tracker', icon: ClipboardList },
+      ],
+    }
+  ],
+  manager: [
+    {
+      category: 'OVERVIEW',
+      links: [
+        { path: '/manager-dashboard', label: 'Team Overview', icon: LayoutDashboard },
+      ],
+    },
+    {
+      category: 'WORKSPACE',
+      links: [
+        { path: '/manager-dashboard/missions', label: 'Active Missions', icon: ClipboardList },
+        { path: '/manager-dashboard/communications', label: 'Tactical Comms', icon: MessageSquare },
+        { path: '/manager-dashboard/reports', label: 'Performance Reports', icon: BarChart3 },
+      ],
+    },
+    {
+      category: 'FINANCE',
+      links: [
+        { path: '/manager-dashboard/payroll', label: 'Payroll & Salaries', icon: BadgeDollarSign },
+      ],
+    },
+  ],
+  employee: [
+    {
+      category: 'WORKSPACE',
+      links: [
+        { path: '/employee-dashboard', label: 'My Tasks', icon: ClipboardList },
+        { path: '/employee-dashboard/activity', label: 'Activity Log', icon: Timer },
+      ],
+    },
+  ],
+};  
 
-    {/* Sidebar */}
-    <aside className={`
-      fixed lg:static w-72 bg-gradient-to-b from-slate-900 to-slate-800 text-white
-      flex flex-col h-full transform-gpu transition-transform duration-500 ease-out z-50
-      ${sidebarOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full lg:translate-x-0'}
-    `}>
-      {/* Logo & Brand */}
-      <div className="p-6 border-b border-slate-700/50">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
-            <LayoutDashboard className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Saquib<span className="text-blue-400">Dev</span></h1>
-            <p className="text-xs text-slate-400 mt-0.5">Administrator Panel</p>
+const Sidebar = ({ user, userRole, sidebarOpen, onClose, onLogout }) => {
+  const role = userRole || user?.role || 'employee';
+  const sections = NAVIGATION_CONFIG[role] || NAVIGATION_CONFIG.employee;
+
+  return (
+    <>
+      {/* ─── Mobile Backdrop ─── */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300"
+          onClick={onClose}
+        />
+      )}
+
+      {/* ─── Sidebar Shell ─── */}
+      <aside
+        className={`
+          fixed lg:static w-[250px] bg-white border-r border-slate-200/60
+          flex flex-col h-full z-50 overflow-hidden
+          transform-gpu transition-transform duration-300 ease-out
+          ${sidebarOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full lg:translate-x-0'}
+        `}
+      >
+        {/* ─── Brand ─── */}
+        <div className="px-6 py-8">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-200">
+              <Briefcase className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h1 className="text-sm font-semibold text-slate-900 leading-none tracking-tight">
+                ProFlow
+              </h1>
+              <p className="text-[10px] tracking-wider uppercase font-semibold text-slate-400 mt-1">
+                Enterprise v4
+              </p>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* User Profile */}
-      <div className="p-6 border-b border-slate-700/50">
-        <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-xl flex items-center justify-center">
-            <span className="text-xl font-bold text-white">
-              {user?.username?.charAt(0).toUpperCase() || 'A'}
-            </span>
-          </div>
-          <div>
-            <p className="font-semibold text-white">{user?.username || 'Admin'}</p>
-            <p className="text-xs text-slate-400 mt-0.5">Administrator</p>
-          </div>
+        {/* ─── Navigation Area ─── */}
+        <nav className="flex-1 px-3 space-y-7 overflow-y-auto no-scrollbar pt-2">
+          {sections.map((section, idx) => (
+            <div key={section.category || idx}>
+              <h3 className="text-[10px] tracking-wider uppercase font-semibold text-slate-400 mb-3 px-3">
+                {section.category}
+              </h3>
+              <div className="space-y-1">
+                {section.links.map((item) => (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    end={item.path.endsWith('dashboard')}
+                    onClick={onClose}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 group relative
+                      ${isActive 
+                        ? 'bg-slate-50 text-slate-900 border-l-[3px] border-indigo-600 font-medium pl-2.5 shadow-sm shadow-slate-200/50' 
+                        : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50/50 border-l-[3px] border-transparent'
+                      }`
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        <item.icon
+                          size={18}
+                          className={`flex-shrink-0 transition-colors duration-200 ${
+                            isActive ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600'
+                          }`}
+                        />
+                        <span className="truncate">{item.label}</span>
+                        {isActive && (
+                            <span className="absolute right-3 w-1.5 h-1.5 rounded-full bg-indigo-500/20" />
+                        )}
+                      </>
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          ))}
+        </nav>
+
+        {/* ─── Footer: User Profile & Logout ─── */}
+        <div className="mt-auto p-4 border-t border-slate-100 bg-slate-50/30">
+            <div className="flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-slate-200/60 hover:bg-white transition-all duration-200 group relative">
+                <div className="w-9 h-9 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center font-semibold text-slate-700 uppercase">
+                    {user?.username?.charAt(0) || 'U'}
+                </div>
+                <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-900 truncate leading-none mb-1">
+                        {user?.username || 'System User'}
+                    </p>
+                    <p className="text-[10px] tracking-wider uppercase font-semibold text-slate-400 truncate">
+                        {role}
+                    </p>
+                </div>
+                
+                {/* Minimal Logout Action beside profile */}
+                <button
+                    onClick={onLogout}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all duration-150 active:scale-90"
+                    title="Log out"
+                >
+                    <LogOut size={16} />
+                </button>
+            </div>
         </div>
-      </div>
+      </aside>
 
-      {/* Navigation */}
-      <nav className="flex-1 p-4 overflow-y-auto">
-        <div className="space-y-1">
-          {/* Dashboard */}
-          <button
-            onClick={() => onTabChange('dashboard')}
-            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all cursor-pointer ${
-              activeTab === 'dashboard'
-                ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-                : 'text-slate-300 hover:bg-slate-800/60'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <LayoutDashboard size={20} />
-              <span className="font-medium">Dashboard</span>
-            </div>
-            {activeTab === 'dashboard' && <ChevronRight size={16} />}
-          </button>
-
-          {/* Users */}
-          <button
-            onClick={() => onTabChange('users')}
-            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all mt-1 cursor-pointer ${
-              activeTab === 'users'
-                ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-                : 'text-slate-300 hover:bg-slate-800/60'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <Users size={20} />
-              <span className="font-medium">Users</span>
-            </div>
-            {activeTab === 'users' && <ChevronRight size={16} />}
-          </button>
-
-          {/* Tasks */}
-          <button
-            onClick={() => onTabChange('tasks')}
-            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all mt-1 cursor-pointer ${
-              activeTab === 'tasks'
-                ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-                : 'text-slate-300 hover:bg-slate-800/60'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <ClipboardList size={20} />
-              <span className="font-medium">Tasks</span>
-            </div>
-            {activeTab === 'tasks' && <ChevronRight size={16} />}
-          </button>
-        </div>
-      </nav>
-
-      {/* Logout Button */}
-      <div className="p-4 border-t border-slate-700/50">
+      {/* ─── Mobile Close Override ─── */}
+      {sidebarOpen && (
         <button
-          onClick={onLogout}
-          className="flex items-center space-x-3 px-4 py-3 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl w-full transition-colors cursor-pointer"
+          onClick={onClose}
+          className="lg:hidden fixed top-6 right-6 z-[60] p-2 bg-white text-slate-900 rounded-full shadow-lg border border-slate-200 active:scale-90 transition-all"
         >
-          <LogOut size={20} />
-          <span className="font-medium">Logout</span>
+          <X size={18} />
         </button>
-      </div>
-    </aside>
-  </>
-);
+      )}
+    </>
+  );
+};
 
-export default Sidebar;
+// Use memo to prevent parent re-renders from triggering expensive DOM reconciliation
+export default memo(Sidebar);

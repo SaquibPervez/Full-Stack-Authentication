@@ -1,0 +1,149 @@
+// ══════════════════════════════════════════════════
+// ProFlow — Prisma Schema
+// Single Source of Truth for Database
+// ══════════════════════════════════════════════════
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ──────────────────────────────────────────────────
+// ENUMS
+// ──────────────────────────────────────────────────
+
+enum Role {
+  admin
+  manager
+  employee
+}
+
+enum TaskStatus {
+  pending
+  in_progress
+  completed
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+}
+
+enum PayrollStatus {
+  paid
+  pending
+}
+
+enum AttendanceStatus {
+  present
+  absent
+}
+
+// ──────────────────────────────────────────────────
+// MODELS
+// ──────────────────────────────────────────────────
+
+model User {
+  id          Int      @id @default(autoincrement())
+  username    String
+  email       String   @unique
+  password    String
+  role        Role     @default(employee)
+  designation String?  @default("General Staff")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  baseSalary  Decimal  @default(0) @map("base_salary") @db.Decimal(12, 2)
+
+  // ─── Relations ───
+  createdTasks  Task[]          @relation("TaskCreator")
+  assignedTasks Task[]          @relation("TaskAssignee")
+  comments      TaskComment[]
+  attendance    Attendance[]
+  payroll       Payroll[]
+
+  @@map("users")
+}
+
+model Task {
+  id          Int          @id @default(autoincrement())
+  title       String
+  description String?      @db.Text
+  status      TaskStatus   @default(pending)
+  priority    TaskPriority @default(medium)
+  dueDate     DateTime?    @map("due_date")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  // ─── Foreign Keys ───
+  createdById  Int  @map("created_by")
+  assignedToId Int? @map("assigned_to")
+
+  // ─── Relations ───
+  createdBy  User          @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  assignedTo User?         @relation("TaskAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  comments   TaskComment[]
+
+  @@map("tasks")
+}
+
+model TaskComment {
+  id        Int      @id @default(autoincrement())
+  content   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // ─── Foreign Keys ───
+  taskId   Int  @map("task_id")
+  userId   Int  @map("user_id")
+  parentId Int? @map("parent_id")
+
+  // ─── Relations ───
+  task    Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent  TaskComment?  @relation("CommentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies TaskComment[] @relation("CommentThread")
+
+  @@map("task_comments")
+}
+
+model Attendance {
+  id         Int              @id @default(autoincrement())
+  date       DateTime         @default(now()) @db.Date
+  punchIn    DateTime?        @map("punch_in")
+  punchOut   DateTime?        @map("punch_out")
+  totalHours Decimal?         @map("total_hours") @db.Decimal(5, 2)
+  status     AttendanceStatus @default(present)
+
+  // ─── Foreign Keys ───
+  userId Int @map("user_id")
+
+  // ─── Relations ───
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("attendance")
+}
+
+model Payroll {
+  id          Int           @id @default(autoincrement())
+  month       String
+  year        Int
+  basicSalary Decimal       @default(0) @map("basic_salary") @db.Decimal(12, 2)
+  allowances  Decimal       @default(0) @db.Decimal(12, 2)
+  deductions  Decimal       @default(0) @db.Decimal(12, 2)
+  netPayable  Decimal       @default(0) @map("net_payable") @db.Decimal(12, 2)
+  status      PayrollStatus @default(pending)
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  // ─── Foreign Keys ───
+  userId Int @map("user_id")
+
+  // ─── Relations ───
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month, year])
+  @@map("payroll")
+}

@@ -1,142 +1,135 @@
-import React from 'react';
-import { User, Mail, Calendar, Briefcase, Trash2 } from 'lucide-react';
+import { Mail, Calendar, Briefcase, Trash2, MoreHorizontal, Shield, User, Users } from 'lucide-react';
 import api from '../../apis/axios';
 import toast from 'react-hot-toast';
-import { useMutation,useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 const EmployeeTable = ({ employees }) => {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
-const deleteMutation = useMutation({
+  const deleteMutation = useMutation({
     mutationFn: async (employeeId) => {
-        const { data } = await api.post(`/admin/delete-user/${employeeId}`)
-        return data
+      const { data } = await api.post(`/admin/delete-user/${employeeId}`);
+      return data;
     },
     onSuccess: (data) => {
-        toast.success(data.message || "Employee deleted successfully")
-
-        // 🔥 This refetches employees automatically
-        queryClient.invalidateQueries(['adminStats'])
+      toast.success(data.message || "Member removed from workspace");
+      queryClient.invalidateQueries(['adminStats']);
+      queryClient.invalidateQueries(['managerStats']);
     },
     onError: (error) => {
-        toast.error(
-            error?.response?.data?.message ??
-            error?.response?.data?.error ??
-            "Failed to delete employee"
-        )
+      toast.error(
+        error?.response?.data?.message ??
+        error?.response?.data?.error ??
+        "Internal system error during deletion"
+      );
     }
-})
+  });
+
 const handleDelete = (employeeId) => {
-    deleteMutation.mutate(employeeId)
-}
-    return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                <div>
-                    <h2 className="text-xl font-bold text-gray-800">Team Members</h2>
-                    <p className="text-sm text-gray-500">Active employees and their roles.</p>
-                </div>
-                <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-3 py-1 rounded-full">
-                    {employees?.length || 0} Members
-                </span>
-            </div>
+  const confirmationMessage =
+    "Are you sure you want to delete this employee? This action is permanent and cannot be undone.";
 
-            <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                    <thead>
-                        <tr className="bg-gray-50 text-gray-600 text-sm uppercase tracking-wider">
-                            <th className="p-4 font-semibold">Employee</th>
-                            <th className="p-4 font-semibold">Role / Designation</th>
-                            <th className="p-4 font-semibold">Status</th>
-                            <th className="p-4 font-semibold">Joined Date</th>
-                            <th className="p-4 font-semibold">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                        {employees && employees.length > 0 ? (
-                            employees.map((emp) => (
-                                <tr key={emp.id} className="hover:bg-gray-50 transition duration-150">
-                                    
-                                    {/* 1. Name & Email */}
-                                    <td className="p-4">
-                                        <div className="flex items-center gap-3">
-                                            {/* Avatar with Initials */}
-                                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
-                                                {(emp.username?.charAt(0)?.toUpperCase() || emp.name?.charAt(0)?.toUpperCase() || '?')}
-                                            </div>
-                                            <div>
-                                                <div className="font-semibold text-gray-800">{emp.username || emp.name || 'Unknown'}</div>
-                                                <div className="text-xs text-gray-500 flex items-center gap-1">
-                                                    <Mail size={10} /> {emp.email}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </td>
+  if (!window.confirm(confirmationMessage)) return;
 
-                                    {/* 2. Designation */}
-                                    <td className="p-4">
-                                        <div className="flex items-center gap-2 text-gray-700">
-                                            <Briefcase size={14} className="text-gray-400" />
-                                            <span className="bg-gray-100 text-gray-700 border border-gray-200 px-2 py-1 rounded text-xs font-medium">
-                                                {emp.designation || emp.role || 'Not Assigned'}
-                                            </span>
-                                        </div>
-                                    </td>
+  deleteMutation.mutate(employeeId);
+};
 
-                                    {/* 3. Active Status */}
-                                    <td className="p-4">
-                                        {(emp.is_active ?? (emp.status === 'Active')) ? (
-                                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-50 text-green-700 text-xs font-medium border border-green-200">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                                                Active
-                                            </span>
-                                        ) : (
-                                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-50 text-red-700 text-xs font-medium border border-red-200">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
-                                                Inactive
-                                            </span>
-                                        )}
-                                    </td>
-
-                                    {/* 4. Joined Date */}
-                                    <td className="p-4">
-                                        <div className="flex items-center gap-2 text-gray-500 text-sm">
-                                            <Calendar size={14} />
-                                            {emp.created_at 
-                                                ? new Date(emp.created_at).toLocaleDateString('en-US', {
-                                                    year: 'numeric',
-                                                    month: 'short',
-                                                    day: 'numeric'
-                                                  })
-                                                : '—'}
-                                        </div>
-                                    </td>
-
-                                    {/* 5. Actions */}
-                                    <td className="p-4">
-                                        <div className="flex items-center gap-2">
-                                            <button 
-                                                onClick={() => handleDelete(emp.id)}
-                                                className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))
-                        ) : (
-                            <tr>
-                                <td colSpan="5" className="p-6 text-center text-gray-400">
-                                    No employees found.
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    );
+  return (
+    <div className="overflow-hidden rounded-2xl bg-white">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-separate border-spacing-0">
+          <thead>
+            <tr className="bg-slate-50/50 text-slate-500 text-[11px] font-black uppercase tracking-[0.15em]">
+              <th className="px-8 py-5 border-b border-slate-100 first:rounded-tl-2xl">Member</th>
+              <th className="px-8 py-5 border-b border-slate-100">Designation</th>
+              <th className="px-8 py-5 border-b border-slate-100">Status</th>
+              <th className="px-8 py-5 border-b border-slate-100">Enrolled</th>
+              <th className="px-8 py-5 border-b border-slate-100 last:rounded-tr-2xl text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50">
+            {employees && employees.length > 0 ? (
+              employees.map((emp) => (
+                <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors group">
+                  <td className="px-8 py-5">
+                    <div className="flex items-center gap-4">
+                      <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-slate-600 font-black text-sm border border-slate-200 group-hover:scale-105 transition-transform">
+                        {emp.username?.charAt(0)?.toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-900 flex items-center gap-2">
+                          {emp.username || emp.name}
+                          {emp.role === 'admin' && (
+                            <span className="p-1 bg-blue-50 rounded-md">
+                              <Shield size={10} className="text-blue-600" />
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-slate-500 font-medium">{emp.email}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-8 py-5">
+                    <div className="flex items-center gap-2">
+                      <div className="px-3 py-1 rounded-lg bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-black uppercase tracking-wider">
+                        {emp.designation || emp.role || 'Contributor'}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-8 py-5">
+                    {(emp.is_active ?? (emp.status === 'Active')) ? (
+                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-black uppercase tracking-wider border border-emerald-100">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                        Online
+                      </div>
+                    ) : (
+                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-wider border border-slate-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                        Offline
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-8 py-5">
+                    <div className="flex items-center gap-2 text-slate-500 text-xs font-bold font-mono">
+                      {emp.created_at 
+                        ? new Date(emp.created_at).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: '2-digit',
+                            year: 'numeric'
+                          })
+                        : '—'}
+                    </div>
+                  </td>
+                  <td className="px-8 py-5 text-right">
+                    <div className="flex items-center justify-end gap-2 outline-none">
+                      <button 
+                        onClick={() => handleDelete(emp.id)}
+                        disabled={deleteMutation.isPending}
+                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all disabled:opacity-50"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="5" className="px-8 py-20 text-center">
+                  <div className="flex flex-col items-center justify-center space-y-4">
+                    <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center border border-slate-100">
+                      <Users className="w-8 h-8 text-slate-200" />
+                    </div>
+                    <p className="text-slate-400 text-sm font-bold tracking-tight">Ecosystem directory is currently empty.</p>
+                  </div>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 };
 
 export default EmployeeTable;
